@@ -1,0 +1,24 @@
+txt-book returns logical classes based on simple text-based documentation.
+
+how it works:
+    this file right now is a simple text-based documentation,
+    meaning it indirectly contains headers, sections, paragraphs, etc.
+
+    for example, to access any given information in this file, simply view the
+    TBook() class.
+
+            TBook t;
+            t_read(&t, "README"); 
+
+            writefln("the text file's contents: %s\n", t.title);
+
+            foreach (TParagraph p; t_paragraphs(&t)) {
+                writefln("%s\n", p.content()); // this file ... \n for example ...
+            }
+
+            foreach (TSection s; t_sections(&t)) {
+                writefln("title: %s\n", s.title());
+                writefln("%s\n", s.content()); this file...
+            }
+
+    this library also allow use of MANUAL book creation using the given structs.
