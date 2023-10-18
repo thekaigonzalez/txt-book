@@ -1,5 +1,9 @@
 my sample book
 
 synopsis:
-    aba is my new book
-    this book can be parsed c>
+    aba is my new book, and this this book can be parsed :)
+    it has simple text-based documentation properties, like 
+    the section that i can move to.
+
+new section:
+    this is a new section, and it can be parsed as well.
