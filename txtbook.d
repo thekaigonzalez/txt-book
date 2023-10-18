@@ -1,7 +1,7 @@
 /*Copyright 2019-2023 Kai D. Gonzalez*/
 
 import std.stdio : writefln, writef;
-import std.string : strip, split;
+import std.string : strip, split, join, startsWith;
 import std.file : readText;
 
 struct TParagraph
@@ -43,7 +43,8 @@ enum bookLexerState
     B_PARAGRAPH_POTENTIAL_END, // when you make a newline in a paragraph, assume 
     // this is wrapped text, we won't IMMEDIATELY
     // close it off until there is another official newline
-    B_BOOK // collecting everything else
+    B_PARAGRAPH_STATE, // collecting everything else
+    B_SECTION_STATE, // collecting the titles of sections
 }
 
 bookLexerTokenType evaluate_type(char tok)
@@ -57,6 +58,16 @@ bookLexerTokenType evaluate_type(char tok)
     default:
         return bookLexerTokenType.B_PLAINTEXT;
     }
+}
+
+string strip_lines(string text)
+{
+    string[] lines = split(text, '\n');
+    for (int i = 0; i < lines.length; i++)
+    {
+        lines[i] = strip(lines[i]);
+    }
+    return join(lines, '\n');
 }
 
 TBook t_create_book(string title)
@@ -88,87 +99,99 @@ TBook t_create_book_from_file(string path)
     t_lex_verify(text);
 
     string tmp = "";
-    int section_depth = 0;
-
-    bookLexerState state = bookLexerState.B_TITLE_STATE;
 
     TSection section = t_create_section("");
+    bookLexerState state = bookLexerState.B_TITLE_STATE;
 
-    for (int i = 0; i < text.length; i++)
+    for (int i = 0; i < text.length - 1; i++)
     {
         char tok = text[i];
         bookLexerTokenType type = evaluate_type(tok);
 
-        switch (type)
+        if (type == bookLexerTokenType.B_NEWLINE)
         {
-        case bookLexerTokenType.B_SECTION_SEPARATOR:
-            if (strip(tmp).length == 0)
-                break;
-            t_set_section_header(&section, tmp);
-
-            tmp = "";
-            break;
-        case bookLexerTokenType.B_NEWLINE:
-            if (strip(tmp).length == 0)
-            {
-                if (state == bookLexerState.B_PARAGRAPH_POTENTIAL_END)
-                {
-                    t_add_paragraph(&section, t_create_paragraph(tmp));
-                    tmp = "";
-                    state = bookLexerState.B_BOOK;
-
-                    t_add_section(&book, section);
-
-                    section = t_create_section("");
-                    break;
-                }
+            if (state == bookLexerState.B_PARAGRAPH_POTENTIAL_END || startsWith(tmp, "\t")) {
+                state = bookLexerState.B_SECTION_STATE;
+                t_add_paragraph(&section, t_create_paragraph(strip_lines(tmp)));
+                tmp = "";
+                continue;
             }
-
-            if (state == bookLexerState.B_TITLE_STATE)
+            switch (state)
             {
+            case bookLexerState.B_TITLE_STATE: // if it's the title
+                state = bookLexerState.B_SECTION_STATE;
                 t_set_book_header(&book, tmp);
                 tmp = "";
-                state = bookLexerState.B_BOOK;
-            }
-            else
-            {
-                if (state != bookLexerState.B_PARAGRAPH_POTENTIAL_END)
+                break;
+
+            case bookLexerState.B_PARAGRAPH_STATE:
+                if (strip(tmp).length >= 0)
                 {
-                    if (strip(tmp).length != 0) {
-                    t_add_paragraph(&section, t_create_paragraph(tmp));
+                    if (state == bookLexerState.B_PARAGRAPH_POTENTIAL_END)
+                    {
+                        writefln("hello");
+                        tmp = "";
+                        state = bookLexerState.B_SECTION_STATE;
                     }
-                    tmp = "";
-                    state = bookLexerState.B_BOOK;
+                    else
+                    {
+                        writefln("12hello");
+                        state = bookLexerState.B_PARAGRAPH_POTENTIAL_END;
+                        tmp ~= tok;
+                    }
                 }
                 else
                 {
-                    state = bookLexerState.B_PARAGRAPH_POTENTIAL_END;
-                    tmp = "";
+                    if (state == bookLexerState.B_PARAGRAPH_POTENTIAL_END)
+                    {
+
+                        state = bookLexerState.B_SECTION_STATE;
+                        t_add_paragraph(&section, t_create_paragraph(strip_lines(tmp)));
+                        t_add_section(&book, section);
+
+                        section = t_create_section("");
+
+                        tmp = "";
+                    }
                 }
-            }
-            tmp = "";
-            break;
-        default:
-            if (t_lex_endofstatment(text, i))
-            {
-                t_add_paragraph(&section, t_create_paragraph(tmp));
-                tmp = "";
+                break;
+
+            default:
                 break;
             }
-            else
-            {
-                tmp ~= text[i];
-                writefln("tmp: %s", tmp);
-                writefln("token type: %s", type);
-                writefln("state: %s", state);
+
+        }
+        else if (type == bookLexerTokenType.B_SECTION_SEPARATOR
+            && state == bookLexerState.B_SECTION_STATE)
+        {
+            writefln("section title: %s", tmp);
+            t_set_section_header(&section, strip(tmp));
+            state = bookLexerState.B_PARAGRAPH_STATE;
+            tmp = "";
+        }
+        else
+        {
+            if (state == bookLexerState.B_PARAGRAPH_POTENTIAL_END && tok != '\n'
+                && type == bookLexerTokenType.B_PLAINTEXT)
+            { // if it was a plan to end the paragraph, there is no longer one
+                state = bookLexerState.B_PARAGRAPH_STATE;
             }
-            break;
+
+            tmp ~= tok;
         }
     }
 
-    writefln("Title: %s", book.title);
-    writefln("Book: %s", book);
+    if (tmp.length > 0)
+    {
+        if (state == bookLexerState.B_PARAGRAPH_POTENTIAL_END || state == bookLexerState
+            .B_PARAGRAPH_STATE)
+        {
+            t_add_paragraph(&section, t_create_paragraph(strip_lines(tmp)));
+            t_add_section(&book, section);
+        }
+    }
     writefln("Section: %s", section);
+
     return book;
 }
 
